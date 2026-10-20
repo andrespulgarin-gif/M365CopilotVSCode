@@ -1,7 +1,7 @@
 import { exec, type ExecException } from "node:child_process";
 import * as vscode from "vscode";
 import { boundedInteger, ensureNotCancelled, resolveWorkspacePath } from "./common";
-import { cleanTerminalOutput, truncateOutput } from "./terminalOutput";
+import { cleanTerminalOutput, truncateOutput, TerminalOutputCapture } from "./terminalOutput";
 import { t } from "../src/i18n";
 import { debug } from "@m365copilot/core/bizchat";
 
@@ -189,7 +189,7 @@ async function runInIntegratedTerminal(
     });
   });
 
-  let raw = "";
+  const raw = new TerminalOutputCapture(MAX_OUTPUT_CHARS * 4);
   let timedOut = false;
   let cancelled = false;
   let released = false;
@@ -217,9 +217,7 @@ async function runInIntegratedTerminal(
   const draining = (async () => {
     try {
       for await (const chunk of execution.read()) {
-        if (raw.length < MAX_OUTPUT_CHARS * 4) {
-          raw += chunk.slice(0, MAX_OUTPUT_CHARS * 4 - raw.length);
-        }
+        raw.push(chunk);
       }
       await Promise.race([
         finished,
@@ -243,7 +241,7 @@ async function runInIntegratedTerminal(
   }
 
   return {
-    output: cleanTerminalOutput(raw, command),
+    output: cleanTerminalOutput(raw.text(), command),
     exitCode: timedOut || cancelled ? null : exitCode,
     timedOut,
     channel: "terminal",
@@ -267,7 +265,7 @@ function runHeadless(
         cancelListener.dispose();
         const exitCode = typeof error?.code === "number" ? error.code : error ? null : 0;
         resolve({
-          output: cleanTerminalOutput(`${stdout}${stderr}`, command),
+          output: cleanTerminalOutput(`${stdout}${stderr}` || error?.message || "", command),
           exitCode,
           timedOut: Boolean(error?.killed) && !cancelledByUser,
           channel: "headless",

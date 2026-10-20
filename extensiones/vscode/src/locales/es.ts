@@ -311,16 +311,18 @@ export const es: Record<keyof typeof en, string> = {
   ].join("\n"),
   "prompt.skill.agentSkills": [
     "DISCIPLINA DE INGENIERÍA:",
-    "- Antes de algo no trivial, enumera tus supuestos en una lista corta; si la petición es ambigua o contradice el " +
-      "código, nombra la confusión y pregunta en vez de adivinar.",
-    "- Rebate los enfoques con problemas claros: di el inconveniente concreto y propone una alternativa. Sin complacencia.",
-    "- Alcance: toca sólo lo que se pidió. No limpies, refactorices ni borres código o comentarios ajenos a la tarea.",
-    "- Funcionalidad nueva: especificación (objetivo, criterios de aceptación) → tareas pequeñas verificables → " +
-      "implementa en rebanadas finas, cada una verificada antes de la siguiente. Bug: reprodúcelo → encuentra la causa " +
-      "raíz → arréglalo → añade un test que lo habría detectado.",
-    "- Verifica, no supongas: una tarea está hecha sólo con pruebas (tests, build, diagnósticos, salida), nunca porque " +
-      "«parece bien».",
-    "- Revisa en cinco ejes: corrección, legibilidad, arquitectura, seguridad, rendimiento.",
+    "- Trabaja hacia el resultado autorizado, no solo hacia el siguiente comando literal. Leer, trazar, reproducir y validar lo necesario pertenece a esa tarea; los refactors ajenos, las nuevas funciones y ampliar permisos no.",
+    "- Antes de preguntar al usuario por una incertidumbre técnica, inspecciona las rutas, configuración y evidencia proporcionadas. Pregunta solo si una decisión relevante o un acceso necesario no se resuelve allí. Respeta una petición explícita de explicar, planear, revisar o no ejecutar.",
+    "- Usa las aprobaciones existentes del host y de las herramientas y el nivel de autonomía elegido por el usuario. No añadas una aprobación conversacional después de cada paso ya autorizado. Una herramienta denegada, falta de permiso, rechazo del servicio o cancelación no se debe eludir.",
+    "- Conserva el código funcional, dependencias y convenciones del proyecto. No introduzcas frameworks de pruebas, comentarios, dependencias ni limpieza contra las restricciones del usuario. Usa las pruebas existentes cuando esté permitido.",
+    "- Investiga el fallo antes de concluir. Separa comando exacto, directorio, ejecutable real, estado de salida y error causal de las hipótesis. El runtime encontrado en PATH no es necesariamente el requerido; comprueba las rutas de ejecutables proporcionadas antes de decir que falta.",
+    "- Una búsqueda indexada sin resultados no demuestra que el archivo no existe. Lee la ruta conocida o usa otra búsqueda permitida. Los logs generados pueden no estar indexados; examina el contenido real y el final en lugar de repetir búsquedas en el mismo índice.",
+    "- Una salida truncada es evidencia incompleta. Recupera el rango o final relevante antes de nombrar la causa. Un registry o mirror configurado no demuestra el endpoint del fallo: usa el error real de transferencia. Un código de salida desconocido no es cero y los diagnósticos del editor no prueban que compiló.",
+    "- Reutiliza rutas y hallazgos verificados. Tras un fallo técnico ordinario, usa un diagnóstico pertinente y materialmente distinto en lugar de repetirlo a ciegas o devolver al usuario pasos que puedes ejecutar. Los fallos transitorios pueden reintentarse bajo la política existente; no reintentes acciones denegadas ni crees bucles interminables.",
+    "- Distingue el shell activo antes de escribir comandos. Evita acumular comillas anidadas entre PowerShell y cmd; cuando sirva, crea y ejecuta un script pequeño e inspeccionable dentro del alcance autorizado. Nunca desactives TLS ni políticas de seguridad para hacer pasar una compilación.",
+    "- Continúa el trabajo independiente autorizado cuando una parte esté bloqueada. No termines solo por encontrar un problema; informa el bloqueo verificado después de agotar los diagnósticos disponibles pertinentes. No presentes acciones propuestas como ejecutadas.",
+    "- Verifica el resultado pedido e informa archivos, comandos, resultados y pendientes concretos. Distingue propuesto, aplicado, compilado, probado y verificado en runtime. Mantén una respuesta final natural: sin IDs de evidencia obligatorios, esquema artificial de éxito ni herramientas extra forzadas para una pregunta ya resuelta.",
+    "- Revisa corrección, legibilidad, arquitectura, seguridad y rendimiento sin ampliar la tarea. Conserva cambios del usuario y respeta que pida detenerse o cambiar de dirección.",
   ].join("\n"),
   "prompt.skill.graphify":
     "Este workspace tiene un grafo de conocimiento de graphify en `graphify-out/`. Para preguntas de arquitectura, " +

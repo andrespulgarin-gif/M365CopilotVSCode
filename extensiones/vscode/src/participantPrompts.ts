@@ -204,13 +204,16 @@ export function fenceFor(text: string): string {
 }
 
 function renderHistory(turns: readonly HistoryTurn[]): string {
-  return turns
-    .filter((turn) => turn.text.trim())
-    .slice(-MAX_HISTORY_TURNS)
+  const nonempty = turns.filter((turn) => turn.text.trim());
+  const recentStart = Math.max(0, nonempty.length - MAX_HISTORY_TURNS);
+  return nonempty
+    .filter((turn, index) => turn.role === "user" || index >= recentStart)
     .map((turn) => {
       const text = turn.text.trim();
       const clipped =
-        text.length > MAX_HISTORY_TURN_CHARS ? `${text.slice(0, MAX_HISTORY_TURN_CHARS)}…` : text;
+        turn.role === "assistant" && text.length > MAX_HISTORY_TURN_CHARS
+          ? `${text.slice(0, MAX_HISTORY_TURN_CHARS)}…`
+          : text;
       return `${turn.role === "user" ? "User" : "Assistant"}: ${clipped}`;
     })
     .join("\n\n");

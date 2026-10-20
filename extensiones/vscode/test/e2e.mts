@@ -133,6 +133,7 @@ import {
 import { buildInlineEditPrompt, extractEditedCode, reindent } from "../src/inlineEditPrompt.ts";
 import {
   renderTranscript,
+  condenseToolResult,
   retrievalText,
   TRANSCRIPT_LIMITS,
   type TranscriptMessage,
@@ -141,6 +142,7 @@ import { describeShell, localDate, renderEnvironment } from "../src/environment.
 import { renderSkills } from "../src/skills.ts";
 import { ConcurrencyLimiter, clip, runSubagentTask, runToolLoop } from "../src/subagentCore.ts";
 import { replaceTextOnce } from "../tools/replaceText.ts";
+import { TerminalOutputCapture, cleanTerminalOutput, truncateOutput } from "../tools/terminalOutput.ts";
 import {
   looksLikeGiveUp,
   looksLikeRemoteSandbox,
@@ -6019,6 +6021,139 @@ async function testDeepDebugTraceOfATurn() {
   );
 }
 
+
+// Full M365 regressions: keep the original runtime and controls.
+function testEvidenceTails() {
+  setLocale("en");
+  const error = "[ERROR] Transfer failed for https://packages.example.invalid/libs/item.pom: PKIX path building failed";
+  const raw = "$ build\r\nBUILD START\r\n" + "progress-only\r\n".repeat(25_000) + error + "\r\nBUILD FAILED\r\n";
+  for (const chunkSize of [4096, 8191, raw.length]) {
+    const capture = new TerminalOutputCapture(80_000);
+    for (let offset = 0; offset < raw.length; offset += chunkSize) {
+      capture.push(raw.slice(offset, offset + chunkSize));
+    }
+    const retained = capture.text();
+    assert.ok(retained.length < 81_000, "the existing terminal buffer remains bounded");
+    const output = truncateOutput(cleanTerminalOutput(retained, "$ build"), 20_000);
+    assert.match(output, /BUILD START/);
+    assert.ok(output.includes(error), "the real failing endpoint and causal error survive");
+    assert.match(output, /BUILD FAILED/);
+    assert.match(output, /characters omitted/);
+  }
+  const short = new TerminalOutputCapture(80_000);
+  short.push("one\r\n");
+  short.push("two\r\n");
+  assert.equal(short.text(), "one\r\ntwo\r\n");
+  const compacted = condenseToolResult("file heading\n" + "noise".repeat(10_000) + error, {
+    maxChars: 800, duplicate: false, older: true,
+  });
+  assert.match(compacted, /file heading/);
+  assert.ok(compacted.includes(error), "old-result compaction must retain the causal tail");
+  assert.match(compacted, /older result shortened/);
+  assert.ok(condenseToolResult("some output", { maxChars: 0, duplicate: false, older: true }).length < 150);
+  console.log("  ✓ evidence: terminal and old-result tails retain failures at every tested chunk size");
+}
+
+function testPreservedParticipantDirections() {
+  setLocale("en");
+  const original = "ORIGINAL GOAL\n" + "keep the existing behavior; ".repeat(2_000) + "\nDO NOT INSTALL DEPENDENCIES";
+  const turns = [
+    { role: "user" as const, text: original },
+    ...Array.from({ length: 8 }, (_, i) => ({ role: "assistant" as const, text: "status " + i })),
+    { role: "user" as const, text: "Use the provided runtime, not whichever one is on PATH." },
+  ];
+  const framing = buildParticipantFraming({ command: undefined, request: "Continue the same task", history: turns });
+  assert.ok(framing.includes(original), "the original goal is neither clipped nor dropped on Continue");
+  assert.equal(framing.split(original).length - 1, 1, "do not duplicate original directions");
+  assert.match(framing, /Use the provided runtime/);
+  assert.match(framing, /Continue the same task$/);
+  for (const language of ["en", "es"] as const) {
+    setLocale(language);
+    const enabled = renderSkills({ ponytail: false, agentSkills: true, graphify: false });
+    assert.match(enabled, /PATH/);
+    assert.match(enabled, /TLS/);
+    assert.ok(enabled.includes(language === "en" ? "denied tool call" : "herramienta denegada"));
+    assert.ok(enabled.includes(language === "en" ? "no mandatory evidence IDs" : "sin IDs de evidencia obligatorios"));
+    assert.equal(renderSkills({ ponytail: false, agentSkills: false, graphify: false }), "");
+  }
+  setLocale("es");
+  console.log("  ✓ full @m365: long user constraints survive follow-ups; existing skill switch still works");
+}
+
+async function testToolFailureRemainsEvidence() {
+  setLocale("en");
+  const prompts: string[] = [];
+  const calls: string[] = [];
+  const server = await startScriptedServer(
+    (index) => index === 0
+      ? `<m365_tool_call>{"name":"${M365_TOOL_NAMES.runCommand}","input":{"command":"build"}}</m365_tool_call>`
+      : index === 1
+        ? `<m365_tool_call>{"name":"${M365_TOOL_NAMES.readFile}","input":{"path":"build.log"}}</m365_tool_call>`
+        : "The dependency transport failed; source compilation has not been reached.",
+    (frame) => prompts.push(String(frame.arguments[0].message.text)),
+  );
+  try {
+    const result = await runToolLoop({
+      framing: "Investigate the failed build without changing permissions.",
+      profile: makeProfile(server.port), tone: null, maxSteps: 4,
+      signal: new AbortController().signal,
+      offeredTools: [{ name: M365_TOOL_NAMES.runCommand }, { name: M365_TOOL_NAMES.readFile }],
+      endpointBase: mockBase(server.port),
+      executeTool: async (name) => {
+        calls.push(name);
+        if (name === M365_TOOL_NAMES.runCommand) throw new Error("Process launch failed: executable not found");
+        return "header\n" + "progress".repeat(10_000) + "\nCAUSAL_ERROR https://packages.example.invalid/item.pom PKIX";
+      },
+    });
+    assert.equal(result.outcome, "done");
+    assert.deepEqual(calls, [M365_TOOL_NAMES.runCommand, M365_TOOL_NAMES.readFile]);
+    assert.match(prompts[1]!, /Process launch failed: executable not found/);
+    assert.match(prompts[2]!, /CAUSAL_ERROR https:\/\/packages\.example\.invalid\/item\.pom PKIX/);
+    assert.equal(prompts.length, 3);
+  } finally { server.close(); }
+  setLocale("es");
+  console.log("  ✓ full loop: rejected executor becomes evidence; a different diagnostic and its causal tail reach the next turn");
+}
+
+async function testNoLabLimitsOrCompletionGate() {
+  setLocale("en");
+  let calls = 0;
+  const server = await startScriptedServer((index) => index < 14
+    ? `<m365_tool_call>{"name":"${M365_TOOL_NAMES.readFile}","input":{"path":"state.txt"}}</m365_tool_call>`
+    : "Done. The requested investigation is complete.");
+  try {
+    const result = await runToolLoop({
+      framing: "Read the changing state while working on the same investigation.",
+      profile: makeProfile(server.port), tone: null, maxSteps: Number.POSITIVE_INFINITY,
+      maxWallClockMs: Number.POSITIVE_INFINITY, signal: new AbortController().signal,
+      offeredTools: [{ name: M365_TOOL_NAMES.readFile }], endpointBase: mockBase(server.port),
+      executeTool: async () => { calls += 1; return "state " + calls; },
+    });
+    assert.equal(calls, 14, "no imported 12-call cap or four-identical-operation veto");
+    assert.equal(result.outcome, "done");
+    assert.equal(result.summary, "Done. The requested investigation is complete.");
+  } finally { server.close(); }
+  let turns = 0;
+  const controller = new AbortController();
+  const cancelled = await startScriptedServer(() => {
+    turns += 1;
+    return `<m365_tool_call>{"name":"${M365_TOOL_NAMES.readFile}","input":{"path":"state.txt"}}</m365_tool_call>`;
+  });
+  try {
+    const result = await runToolLoop({
+      framing: "Inspect the state.", profile: makeProfile(cancelled.port), tone: null, maxSteps: 5,
+      signal: controller.signal, offeredTools: [{ name: M365_TOOL_NAMES.readFile }],
+      endpointBase: mockBase(cancelled.port),
+      executeTool: async () => { controller.abort(); throw new Error("cancelled by user"); },
+    });
+    assert.equal(result.outcome, "cancelled");
+    assert.equal(turns, 1, "cancellation is not turned into an automatic recovery attempt");
+  } finally { cancelled.close(); }
+  setLocale("es");
+  console.log("  ✓ native loop: user budgets, normal final text and cancellation preserved; no Lab gates");
+}
+
+
 async function main() {
   // The assertions below were written against the Spanish catalog (the
   // extension's original language); the i18n tests switch locale themselves
@@ -6044,6 +6179,8 @@ async function main() {
   testTranscript();
   testEnvironment();
   testSkills();
+  testEvidenceTails();
+  testPreservedParticipantDirections();
   console.log("commitMessage.ts");
   testCommitMessageValidation();
   console.log("client.ts");
@@ -6079,6 +6216,8 @@ async function main() {
   await testToolLoopStreamsProse();
   await testToolLoopStopsAfterCall();
   await testToolLoopForcedRetry();
+  await testToolFailureRemainsEvidence();
+  await testNoLabLimitsOrCompletionGate();
   console.log("lineDiff.ts");
   testLineDiff();
   console.log("participant / editor");

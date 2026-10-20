@@ -319,7 +319,18 @@ export async function runToolLoop(params: ToolLoopParams): Promise<ToolLoopResul
       detail: `${finishedCall.name}(${safeJsonPreview(finishedCall.input)})`,
       toolName: finishedCall.name,
     });
-    const resultText = await executeTool(finishedCall.name, finishedCall.input);
+    let resultText: string;
+    try {
+      resultText = await executeTool(finishedCall.name, finishedCall.input);
+    } catch (error) {
+      if (signal.aborted) {
+        return { ok: false, outcome: "cancelled", summary: t("subagent.cancelled"), steps: step };
+      }
+      resultText = t("tool.error", error instanceof Error ? error.message : String(error));
+    }
+    if (signal.aborted) {
+      return { ok: false, outcome: "cancelled", summary: t("subagent.cancelled"), steps: step };
+    }
     lastResultText = resultText;
     steps.push({
       call: renderCallBlock(step, finishedCall),
@@ -387,10 +398,7 @@ function renderSteps(steps: readonly LoopStep[]): string[] {
   );
   return steps.flatMap((step, index) => {
     const budget = budgets[index]!; // one budget per step
-    const text =
-      budget.older || budget.duplicate
-        ? condenseToolResult(step.result, budget)
-        : clip(step.result, budget.maxChars);
+    const text = condenseToolResult(step.result, budget);
     return [step.call, t("subagent.prompt.resultBlock", step.name, text)];
   });
 }

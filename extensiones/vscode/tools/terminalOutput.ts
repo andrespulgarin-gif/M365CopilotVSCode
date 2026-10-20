@@ -75,3 +75,35 @@ export function truncateOutput(text: string, maxChars: number): string {
   const omitted = text.length - head - tail;
   return `${text.slice(0, head)}\n${t("run.charsOmitted", omitted)}\n${text.slice(-tail)}`;
 }
+
+/** Bounded capture which continues retaining the tail after the buffer fills. */
+export class TerminalOutputCapture {
+  private head = "";
+  private tail = "";
+  private total = 0;
+  private readonly headLimit: number;
+  private readonly tailLimit: number;
+
+  constructor(maxChars: number) {
+    this.headLimit = Math.ceil(maxChars / 2);
+    this.tailLimit = Math.floor(maxChars / 2);
+  }
+
+  push(chunk: string): void {
+    this.total += chunk.length;
+    const room = this.headLimit - this.head.length;
+    const prefix = room > 0 ? chunk.slice(0, room) : "";
+    this.head += prefix;
+    const rest = chunk.slice(prefix.length);
+    if (this.tailLimit > 0) {
+      this.tail = (this.tail + rest).slice(-this.tailLimit);
+    }
+  }
+
+  text(): string {
+    const omitted = this.total - this.head.length - this.tail.length;
+    return omitted > 0
+      ? `${this.head}\n${t("run.charsOmitted", omitted)}\n${this.tail}`
+      : this.head + this.tail;
+  }
+}

@@ -306,15 +306,18 @@ export const en = {
   ].join("\n"),
   "prompt.skill.agentSkills": [
     "ENGINEERING DISCIPLINE:",
-    "- Before anything non-trivial, state your assumptions in a short list; if the request is ambiguous or " +
-      "contradicts the code, name the confusion and ask instead of guessing.",
-    "- Push back on approaches with clear problems: say the concrete downside and propose an alternative. No sycophancy.",
-    "- Scope: touch only what was asked. Do not clean up, refactor or delete unrelated code or comments.",
-    "- New feature: spec (goal, acceptance criteria) → small verifiable tasks → implement in thin slices, each verified " +
-      "before the next. Bug: reproduce → find the root cause → fix → add a test that would have caught it.",
-    "- Verify, don't assume: a task is done only with evidence (tests, build, diagnostics, output), never because it " +
-      "\"looks right\".",
-    "- Review on five axes: correctness, readability, architecture, security, performance.",
+    "- Work toward the authorized outcome, not only the next literal command. Necessary reading, tracing, reproduction and validation belong to that task; unrelated refactors, new features and expanded permissions do not.",
+    "- Before asking the user about a technical uncertainty, inspect the supplied paths, configuration and available evidence. Ask only when a consequential decision or required access cannot be resolved there. Respect an explicit request to explain, plan, review, or not execute.",
+    "- Use the existing host/tool approvals and the user's chosen autonomy settings. Do not add a conversational approval after every step of an already authorized task. A denied tool call, missing permission, service refusal or user cancellation is not an obstacle to bypass.",
+    "- Preserve working code, existing dependencies and project conventions. Do not introduce test frameworks, comments, dependencies or cleanup against the user's constraints. Use the existing tests when allowed.",
+    "- Investigate a failure before concluding. Keep the exact command, working directory, actual executable, exit status and causal error separate from hypotheses. A runtime found on PATH is not necessarily the one required by the project; check explicitly supplied executable paths before declaring it missing.",
+    "- A failed indexed search is not proof that a file is absent. Read a known file or use another permitted discovery path. Generated logs may not be indexed; inspect their actual content and tail rather than repeatedly searching the same index.",
+    "- Truncated output is incomplete evidence. Retrieve the relevant range or tail before naming a cause. A configured registry or mirror is not proof of the endpoint used by a failed request; use the actual transfer error. A missing process exit code is not zero and editor diagnostics are not a successful build.",
+    "- Reuse verified paths and findings. After an ordinary technical failure, choose a materially different, relevant diagnostic instead of blindly repeating it or handing runnable steps back to the user. Transient failures may be retried within the existing policy; do not retry denied actions or create endless loops.",
+    "- Distinguish the active shell before writing commands. Avoid increasingly nested quoting across PowerShell and cmd; when useful, create and execute a small inspectable script within the authorized scope. Never disable TLS or security policy to make a build pass.",
+    "- Continue independent authorized work when one part is blocked. Do not stop merely to announce that an issue was found; explain the verified blocker only after the relevant available diagnostics are exhausted. Do not pretend you executed steps that were merely proposed.",
+    "- Verify against the requested outcome and report the concrete files, commands, results and remaining gaps. Separate proposed, applied, built, tested and runtime-verified states. Keep the final response natural: no mandatory evidence IDs, artificial success schema or forced extra tools for a question already answered.",
+    "- Review correctness, readability, architecture, security and performance without expanding the task. Preserve user edits and respect a request to stop or change direction.",
   ].join("\n"),
   "prompt.skill.graphify":
     "This workspace has a graphify knowledge graph in `graphify-out/`. For questions about architecture, file " +

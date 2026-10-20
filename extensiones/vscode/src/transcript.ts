@@ -90,7 +90,10 @@ export function condenseToolResult(text: string, budget: ResultBudget): string {
   if (budget.duplicate) return t("prompt.sameResultBelow");
   if (text.length <= budget.maxChars) return text;
   if (!budget.older) return trimForContext(text, budget.maxChars);
-  return `${text.slice(0, budget.maxChars).trimEnd()}\n${t("prompt.olderResultShortened", text.length - budget.maxChars)}`;
+  const headChars = Math.ceil(Math.max(0, budget.maxChars) * 0.6);
+  const tailChars = Math.max(0, budget.maxChars - headChars);
+  const tail = tailChars > 0 ? text.slice(-tailChars) : "";
+  return `${text.slice(0, headChars).trimEnd()}\n${t("prompt.olderResultShortened", text.length - headChars - tailChars)}\n${tail.trimStart()}`;
 }
 
 /**
