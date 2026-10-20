@@ -44,6 +44,8 @@ export const TRANSCRIPT_LIMITS = {
   maxToolCallInputChars: 4_000,
 } as const;
 
+export type TranscriptLimits = { [K in keyof typeof TRANSCRIPT_LIMITS]: number };
+
 /** A request shorter than this is a follow-up ("now the other one"): the previous one says what it is about. */
 const SHORT_REQUEST_WORDS = 8;
 
@@ -99,7 +101,7 @@ export function condenseToolResult(text: string, budget: ResultBudget): string {
  */
 export function renderTranscript(
   messages: readonly TranscriptMessage[],
-  limits = TRANSCRIPT_LIMITS,
+  limits: TranscriptLimits = TRANSCRIPT_LIMITS,
 ): string {
   const pinned = findLastIndex(
     messages,
