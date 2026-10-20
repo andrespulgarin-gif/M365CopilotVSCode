@@ -121,6 +121,11 @@ async function terminalFor(cwd: vscode.Uri): Promise<vscode.Terminal> {
     cwd,
     iconPath: new vscode.ThemeIcon("sparkle"),
     isTransient: true,
+    env: {
+      GIT_PAGER: "cat",
+      PAGER: "cat",
+      GIT_TERMINAL_PROMPT: "0",
+    },
   });
   cached = { terminal, cwd: key };
   return terminal;
@@ -172,11 +177,14 @@ async function runInIntegratedTerminal(
   // Register the end listener BEFORE reading: the command can finish while
   // the stream is still being drained, and that event carries the exit code.
   let exitCode: number | null = null;
+  let ended = false;
+  let endListener: vscode.Disposable | undefined;
   const finished = new Promise<void>((resolve) => {
-    const listener = vscode.window.onDidEndTerminalShellExecution((event) => {
+    endListener = vscode.window.onDidEndTerminalShellExecution((event) => {
       if (event.execution !== execution) return;
+      ended = true;
       exitCode = event.exitCode ?? null;
-      listener.dispose();
+      endListener?.dispose();
       resolve();
     });
   });
@@ -184,37 +192,54 @@ async function runInIntegratedTerminal(
   let raw = "";
   let timedOut = false;
   let cancelled = false;
-
-  const interrupt = () => {
-    // There is no API to kill a shell execution, but Ctrl+C (ETX) is
-    // exactly what a person would press.
-    try {
-      terminal.sendText("\x03", false);
-    } catch {
-      /* terminal already gone */
-    }
+  let released = false;
+  let releaseWait: () => void = () => {};
+  const abandoned = new Promise<void>((resolve) => {
+    releaseWait = resolve;
+  });
+  const disposeStalledTerminal = () => {
+    if (released) return;
+    released = true;
+    if (cached?.terminal === terminal) cached = undefined;
+    terminal.dispose();
+    releaseWait();
   };
 
   const timer = setTimeout(() => {
     timedOut = true;
-    interrupt();
+    disposeStalledTerminal();
   }, timeoutMs);
   const cancelListener = token.onCancellationRequested(() => {
     cancelled = true;
-    interrupt();
+    disposeStalledTerminal();
   });
 
-  try {
-    for await (const chunk of execution.read()) {
-      raw += chunk;
-      if (raw.length > MAX_OUTPUT_CHARS * 4) break; // plenty; the rest is truncated anyway
-      if (timedOut || cancelled) break;
+  const draining = (async () => {
+    try {
+      for await (const chunk of execution.read()) {
+        if (raw.length < MAX_OUTPUT_CHARS * 4) {
+          raw += chunk.slice(0, MAX_OUTPUT_CHARS * 4 - raw.length);
+        }
+      }
+      await Promise.race([
+        finished,
+        new Promise<void>((resolve) => setTimeout(resolve, 1500)),
+      ]);
+    } catch (error) {
+      if (!timedOut && !cancelled) throw error;
     }
-    // The stream can end slightly before the exit code arrives.
-    await Promise.race([finished, new Promise((resolve) => setTimeout(resolve, 1500))]);
+  })();
+
+  try {
+    await Promise.race([draining, abandoned]);
+    if (!ended && !timedOut && !cancelled) disposeStalledTerminal();
+  } catch (error) {
+    disposeStalledTerminal();
+    throw error;
   } finally {
     clearTimeout(timer);
     cancelListener.dispose();
+    endListener?.dispose();
   }
 
   return {
