@@ -114,6 +114,14 @@ export function maxStepsForCommand(
   return maxToolCalls === 0 ? Number.POSITIVE_INFINITY : maxToolCalls;
 }
 
+export const DEFAULT_MAX_CHAT_DURATION_MINUTES = 8;
+
+export function chatWallClockBudgetMs(
+  maxDurationMinutes: number = DEFAULT_MAX_CHAT_DURATION_MINUTES,
+): number {
+  return maxDurationMinutes === 0 ? Number.POSITIVE_INFINITY : maxDurationMinutes * 60_000;
+}
+
 const MAX_HISTORY_TURNS = 6;
 const MAX_HISTORY_TURN_CHARS = 1_500;
 
