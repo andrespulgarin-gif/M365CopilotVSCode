@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - build-vsix-github-actions
+      - fix-git-terminal-timeouts
   workflow_dispatch:
 
 permissions:
@@ -33,6 +34,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
       - name: Build project
         run: pnpm build
 
@@ -45,7 +52,7 @@ jobs:
       - name: Upload downloadable VSIX
         uses: actions/upload-artifact@v4
         with:
-          name: m365-copilot-vscode-fixed-tool-limit
+          name: m365-copilot-vscode-fixed-terminal
           path: releases/vscode/*.vsix
           if-no-files-found: error
           retention-days: 14
