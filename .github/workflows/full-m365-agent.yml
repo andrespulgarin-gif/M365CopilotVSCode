@@ -1,0 +1,51 @@
+name: Full M365 agent
+
+on:
+  push:
+    branches: [fix-full-m365-agent]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-m365-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve exact source
+        run: |
+          mkdir -p /tmp/full-m365-evidence
+          git archive --format=zip --prefix=M365CopilotVSCode/ HEAD > /tmp/full-m365-evidence/M365CopilotVSCode-source.zip
+          git rev-parse HEAD > /tmp/full-m365-evidence/SOURCE_COMMIT.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-m365-source
+          path: /tmp/full-m365-evidence/*
+          retention-days: 14
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm package:vscode
+      - name: Record package checksums
+        run: sha256sum releases/vscode/*.vsix > releases/vscode/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-m365-vsix
+          path: releases/vscode/*
+          if-no-files-found: error
+          retention-days: 14
