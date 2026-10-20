@@ -143,9 +143,13 @@ export function renderTranscript(
           : message.parts.every((part) => part.kind === "toolResult")
             ? t("prompt.role.toolResults")
             : "User";
+    // User instructions are authoritative context, not recoverable tool output.
+    // Never silently shorten the current goal or earlier user directions.
+    const required = message.role === "user" && message.parts.some(isText);
     blocks.push({
       index,
-      text: `${label}:\n${trimForContext(text, isRequest ? limits.maxRequestChars : limits.maxMessageChars)}`,
+      required,
+      text: `${label}:\n${required ? text : trimForContext(text, isRequest ? limits.maxRequestChars : limits.maxMessageChars)}`,
     });
   }
   if (blocks.length === 0) return "";
@@ -159,16 +163,23 @@ export function renderTranscript(
  * conversation, newest first. A gap left by dropped blocks gets one note.
  */
 function selectWithinBudget(
-  blocks: readonly { readonly index: number; readonly text: string }[],
+  blocks: readonly { readonly index: number; readonly text: string; readonly required: boolean }[],
   pinned: number,
   maxChars: number,
 ): string {
   const kept = new Map<number, string>();
-  const request = blocks.find((block) => block.index === pinned);
-  if (request) kept.set(request.index, request.text);
   let remaining = maxChars;
-  const after = blocks.filter((block) => block.index > pinned).reverse();
-  const before = blocks.filter((block) => block.index < pinned).reverse();
+  for (const block of blocks) {
+    if (block.required) {
+      kept.set(block.index, block.text);
+      remaining -= block.text.length;
+    }
+  }
+  // Spend the remaining budget only on recoverable assistant/tool context.
+  // Required user directions are always included, even if they alone exceed
+  // the provider's estimated capacity: only the real provider can reject them.
+  const after = blocks.filter((block) => block.index > pinned && !block.required).reverse();
+  const before = blocks.filter((block) => block.index < pinned && !block.required).reverse();
   for (const block of [...after, ...before]) {
     if (remaining <= 0) break;
     if (block.text.length <= remaining) {
