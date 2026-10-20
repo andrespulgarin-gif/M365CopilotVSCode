@@ -156,6 +156,7 @@ export class M365CopilotProvider implements vscode.LanguageModelChatProvider, vs
     const prompt = flattenMessages(messages, {
       catalog,
       toolsRequired,
+      maxInputTokens: model.maxInputTokens,
       environment: currentEnvironment(),
       skills: currentSkills(),
       projectContext,
