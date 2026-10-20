@@ -29,6 +29,8 @@ import { findModel } from "./models";
 import {
   asParticipantCommand,
   buildParticipantFraming,
+  chatWallClockBudgetMs,
+  DEFAULT_MAX_CHAT_DURATION_MINUTES,
   DEFAULT_MAX_TOOL_CALLS,
   maxStepsForCommand,
   toolsForCommand,
@@ -38,7 +40,7 @@ import {
 } from "./participantPrompts";
 import { isTokenUsable, MAX_TURN_IMAGES, type TurnImage, debug } from "@m365copilot/core/bizchat";
 import type { ProfileStore } from "./secrets";
-import { MAX_TASK_WALL_CLOCK_MS, runToolLoop } from "./subagentCore";
+import { runToolLoop } from "./subagentCore";
 import { retrievalText } from "./transcript";
 import { toolResultToText } from "./subagents";
 import type { WorkspaceEditManager } from "../tools/writeFile";
@@ -194,6 +196,12 @@ async function handleRequest(
   };
 
   stream.progress(t("participant.progress.thinking"));
+  const maxDurationMinutes = boundedInteger(
+    vscode.workspace.getConfiguration("m365copilot.chat").get<number>("maxDurationMinutes"),
+    DEFAULT_MAX_CHAT_DURATION_MINUTES,
+    0,
+    240,
+  );
   try {
     const result = await runToolLoop({
       framing,
@@ -208,6 +216,7 @@ async function handleRequest(
           200,
         ),
       ),
+      maxWallClockMs: chatWallClockBudgetMs(maxDurationMinutes),
       signal: controller.signal,
       offeredTools,
       singleRoot: (vscode.workspace.workspaceFolders?.length ?? 0) <= 1,
@@ -259,7 +268,7 @@ async function handleRequest(
         break;
       case "timeLimit":
         stream.markdown(
-          `\n\n${t("participant.timeLimit", Math.round(MAX_TASK_WALL_CLOCK_MS / 60_000))}`,
+          `\n\n${t("participant.timeLimit", maxDurationMinutes)}`,
         );
         unfinished = true;
         break;
