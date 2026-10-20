@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: full-m365-${{ github.ref }}
@@ -14,20 +14,18 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/fix-full-m365-agent'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Preserve exact source
-        run: |
-          mkdir -p /tmp/full-m365-evidence
-          git archive --format=zip --prefix=M365CopilotVSCode/ HEAD > /tmp/full-m365-evidence/M365CopilotVSCode-source.zip
-          git rev-parse HEAD > /tmp/full-m365-evidence/SOURCE_COMMIT.txt
-      - uses: actions/upload-artifact@v4
         with:
-          name: full-m365-source
-          path: /tmp/full-m365-evidence/*
-          retention-days: 14
+          fetch-depth: 0
+      - name: Apply checked source migration when present
+        run: |
+          if test -f scripts/full-base-recovery.py; then
+            python3 scripts/full-base-recovery.py
+          fi
       - uses: pnpm/action-setup@v4
         with:
           version: 10.28.2
@@ -36,13 +34,37 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
+      - name: Verify complete base and original controls
+        run: node extensiones/vscode/test/base-parity.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - name: Lint changed production sources
+        run: pnpm --filter m365-copilot-vscode exec oxlint src/locales/en.ts src/locales/es.ts src/subagentCore.ts src/participantPrompts.ts src/transcript.ts tools/terminal.ts tools/terminalOutput.ts
       - run: pnpm build
       - run: pnpm test
       - run: pnpm package:vscode
-      - name: Record package checksums
-        run: sha256sum releases/vscode/*.vsix > releases/vscode/SHA256SUMS.txt
+      - name: Recheck preservation after build
+        run: node extensiones/vscode/test/base-parity.mjs
+      - name: Commit validated source to this branch only
+        run: |
+          git add -A -- extensiones/vscode scripts/full-base-recovery.py
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix(vscode): preserve full M365 base and improve investigation evidence'
+            git push origin HEAD:fix-full-m365-agent
+          fi
+      - name: Preserve exact source and changes
+        run: |
+          mkdir -p /tmp/full-m365-evidence
+          git archive --format=zip --prefix=M365CopilotVSCode/ HEAD > /tmp/full-m365-evidence/M365CopilotVSCode-source.zip
+          git rev-parse HEAD > /tmp/full-m365-evidence/SOURCE_COMMIT.txt
+          git diff c062fe6a5d032068600f909d17ea36cd2dae663c HEAD -- extensiones/vscode > /tmp/full-m365-evidence/full-m365-3.0.5.patch
+          sha256sum releases/vscode/*.vsix > releases/vscode/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-m365-source
+          path: /tmp/full-m365-evidence/*
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: full-m365-vsix
