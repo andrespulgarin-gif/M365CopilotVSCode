@@ -117,7 +117,7 @@ export function renderTranscript(
   });
 
   let resultIndex = 0;
-  const blocks: { readonly index: number; readonly text: string }[] = [];
+  const blocks: { readonly index: number; readonly text: string; readonly required: boolean }[] = [];
   for (const [index, message] of messages.entries()) {
     const lines = message.parts.map((part) => {
       if (part.kind === "text") return part.text;
