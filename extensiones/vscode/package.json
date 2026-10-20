@@ -750,6 +750,13 @@
           "maximum": 200,
           "markdownDescription": "%config.chat.maxToolCalls%"
         },
+        "m365copilot.chat.maxDurationMinutes": {
+          "type": "integer",
+          "default": 8,
+          "minimum": 0,
+          "maximum": 240,
+          "markdownDescription": "%config.chat.maxDurationMinutes%"
+        },
         "m365copilot.subagents.enabled": {
           "type": "boolean",
           "default": true,
