@@ -5,7 +5,7 @@ import {
   type ToolCatalog,
   MAX_TURN_IMAGES,
 } from "@m365copilot/core/bizchat";
-import { renderTranscript, type TranscriptMessage, type TranscriptPart } from "./transcript";
+import { renderTranscript, TRANSCRIPT_LIMITS, type TranscriptMessage, type TranscriptPart } from "./transcript";
 import { t } from "./i18n";
 
 /*
@@ -30,6 +30,8 @@ export interface FlattenOptions {
   readonly skills?: string;
   /** Contexto del proyecto recuperado del índice local (projectIndex.ts), si lo hay. */
   readonly projectContext?: string;
+  /** Advertised provider input-token capacity: an estimate, not a service guarantee. */
+  readonly maxInputTokens?: number;
   /** Las imágenes que van adjuntas al turno ({@link imagesOf}): el transcript las anuncia como tales. */
   readonly attachedImages?: ReadonlySet<unknown>;
 }
@@ -95,7 +97,25 @@ export function flattenMessages(
   messages: readonly vscode.LanguageModelChatRequestMessage[],
   options: FlattenOptions = {},
 ): string {
-  const transcript = renderTranscript(toTranscript(messages, options.attachedImages));
+  // Use the model's advertised capacity only to prioritize recoverable history.
+  // Do not use it to reject or shorten the user's own instructions.
+  const framingChars = [
+    t("prompt.tone"),
+    t("prompt.markdown"),
+    options.skills ?? "",
+    options.catalog ? buildToolProtocolInstructions(options.catalog) : "",
+    options.environment ?? "",
+    options.projectContext ?? "",
+  ].filter(Boolean).join("\n\n").length;
+  const estimate = options.maxInputTokens;
+  const optionalHistoryBudget =
+    typeof estimate === "number" && Number.isFinite(estimate) && estimate > 0
+      ? Math.max(0, Math.floor(estimate * 3.5 * 0.8) - framingChars - 2_000)
+      : TRANSCRIPT_LIMITS.maxContextChars;
+  const transcript = renderTranscript(toTranscript(messages, options.attachedImages), {
+    ...TRANSCRIPT_LIMITS,
+    maxContextChars: optionalHistoryBudget,
+  });
   if (!transcript) return "";
 
   // A short reminder placed AFTER the transcript — the last thing the model
