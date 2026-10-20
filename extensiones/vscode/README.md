@@ -489,11 +489,14 @@ search **says when it was not exhaustive** instead of claiming "no matches".
 Every agent step is a whole new prompt (BizChat takes one text per turn), so
 what goes into it — and what stays out — decides how well the model follows:
 
-- **The request is pinned.** However many tool steps pile up, the request being
-  worked on stays in the prompt, marked as the current request. The two latest
-  tool results go whole; older ones keep their start (the model can call the
-  tool again), and a result repeated word for word later on becomes a one-line
-  pointer. When something still has to go, it is the oldest turns, with a note.
+- **User instructions are not silently shortened.** The original request and
+  every later user direction stay complete even when they exceed the model's
+  estimated context budget; actual service limits can still reject a large prompt.
+  Recoverable assistant/tool context is prioritized according to the model's
+  advertised input-token hint, not a fixed 24K-character user-message cutoff.
+  The two latest tool results are kept with bounded detail; older ones are
+  shortened with an explicit re-read notice. A duplicated result becomes a pointer.
+  This is not a guarantee that every M365 model supports its advertised token count.
 - **Environment.** The system and shell (with the PowerShell 5.1 quirk: no
   `&&`), the absolute workspace root — native tools want absolute paths — and
   today's date.
