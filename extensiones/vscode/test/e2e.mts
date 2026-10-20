@@ -847,12 +847,32 @@ function testTranscript() {
   ];
   const squeezed = renderTranscript(pressure, { ...TRANSCRIPT_LIMITS, maxContextChars: 20_000 });
   assert.ok(squeezed.length < 22_000, `respeta el presupuesto (${squeezed.length})`);
-  assert.doesNotMatch(squeezed, /first chat turn/);
+  assert.match(squeezed, /first chat turn/, "earlier explicit user direction is preserved");
   assert.match(
     squeezed,
     /\[earlier turns omitted[^\]]*\]\n\nUser \(current request\):\nTHE TASK\n\n\[earlier turns omitted[^\]]*\]\n\n/,
   );
   assert.match(squeezed, /result 11 y/, "el último resultado sigue ahí");
+
+  // No fixed character cap may shorten authoritative user instructions,
+  // including earlier directions followed by many tools and a newer request.
+  const originalGoal = "original-" + "O".repeat(65_000);
+  const followUp = "followup-" + "F".repeat(38_000);
+  const fullSingle = renderTranscript([user(originalGoal)]);
+  assert.ok(fullSingle.includes(originalGoal), "a long single goal is preserved whole");
+  const longSession = renderTranscript([
+    user(originalGoal),
+    ...Array.from({ length: 14 }, (_, i) => [
+      call("read_file"),
+      result("read_file", "tool result " + i + "Z".repeat(9_000)),
+    ]).flat(),
+    user(followUp),
+  ], { ...TRANSCRIPT_LIMITS, maxContextChars: 12_000 });
+  assert.ok(longSession.includes(originalGoal), "earlier original goal is not lost");
+  assert.ok(longSession.includes(followUp), "long newest user direction is not shortened");
+  assert.equal(longSession.split(originalGoal).length - 1, 1);
+  assert.equal(longSession.split(followUp).length - 1, 1);
+  assert.match(longSession, /earlier turns omitted/);
 
   // Retrieval: a short follow-up brings the previous request along.
   const long = "explain how the token server validates incoming profiles before storing them";
