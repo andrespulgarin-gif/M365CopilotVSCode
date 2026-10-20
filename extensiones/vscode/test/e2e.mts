@@ -201,6 +201,8 @@ import { join } from "node:path";
 import {
   asParticipantCommand,
   buildParticipantFraming,
+  chatWallClockBudgetMs,
+  DEFAULT_MAX_CHAT_DURATION_MINUTES,
   DEFAULT_MAX_TOOL_CALLS,
   fenceFor,
   maxStepsForCommand,
@@ -3526,6 +3528,9 @@ function testParticipantPrompts() {
   assert.equal(maxStepsForCommand("tests", 0), Number.POSITIVE_INFINITY);
   assert.equal(maxStepsForCommand("explain", 60), 4);
   assert.equal(maxStepsForCommand("terminal", 0), 6);
+  assert.equal(chatWallClockBudgetMs(), DEFAULT_MAX_CHAT_DURATION_MINUTES * 60_000);
+  assert.equal(chatWallClockBudgetMs(30), 30 * 60_000);
+  assert.equal(chatWallClockBudgetMs(0), Number.POSITIVE_INFINITY);
 
   // A fence always outlasts any backtick run inside the code.
   assert.equal(fenceFor("const a = 1;"), "```");
