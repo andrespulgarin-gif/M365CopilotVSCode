@@ -5,6 +5,7 @@ on:
     branches:
       - build-vsix-github-actions
       - fix-git-terminal-timeouts
+      - fix-configurable-chat-duration
   workflow_dispatch:
 
 permissions:
@@ -37,8 +38,8 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Lint changed terminal source
-        run: pnpm --filter m365-copilot-vscode exec oxlint tools/terminal.ts
+      - name: Lint changed sources
+        run: pnpm --filter m365-copilot-vscode exec oxlint tools/terminal.ts src/participant.ts src/participantPrompts.ts
 
       - name: Build project
         run: pnpm build
@@ -52,7 +53,7 @@ jobs:
       - name: Upload downloadable VSIX
         uses: actions/upload-artifact@v4
         with:
-          name: m365-copilot-vscode-fixed-terminal
+          name: m365-copilot-vscode-configurable-duration
           path: releases/vscode/*.vsix
           if-no-files-found: error
           retention-days: 14
