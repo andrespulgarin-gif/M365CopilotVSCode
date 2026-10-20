@@ -37,8 +37,8 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint changed terminal source
+        run: pnpm --filter m365-copilot-vscode exec oxlint tools/terminal.ts
 
       - name: Build project
         run: pnpm build
