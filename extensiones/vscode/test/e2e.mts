@@ -145,6 +145,11 @@ import { replaceTextOnce } from "../tools/replaceText.ts";
 import { pastedTextOf, renderPastedText } from "../src/attachmentText.ts";
 import { TerminalOutputCapture, cleanTerminalOutput, truncateOutput } from "../tools/terminalOutput.ts";
 import {
+  commandTimeoutSeconds,
+  startCommandTimeout,
+  type CommandTimerScheduler,
+} from "../tools/commandTimeout.ts";
+import {
   looksLikeGiveUp,
   looksLikeRemoteSandbox,
   ProseHold,
@@ -6197,6 +6202,71 @@ async function testPastedTextReferences() {
   console.log("  ✓ @m365 pasted text references: exact content, two MIME types, no hidden truncation");
 }
 
+function testCommandTimeouts() {
+  assert.equal(commandTimeoutSeconds(undefined), 60);
+  assert.equal(commandTimeoutSeconds(null), 60);
+  assert.equal(commandTimeoutSeconds(0), 0, "0 disables only the command-local timeout");
+  assert.equal(commandTimeoutSeconds(300), 300);
+  assert.equal(commandTimeoutSeconds(3_600), 3_600, "one hour must not be silently clamped");
+  assert.equal(commandTimeoutSeconds(86_400), 86_400);
+  assert.throws(() => commandTimeoutSeconds(-1), /non-negative/);
+  assert.throws(() => commandTimeoutSeconds(3.5), /non-negative/);
+  assert.throws(() => commandTimeoutSeconds("3600"), /non-negative/);
+
+  function fakeTimer() {
+    let nextId = 0;
+    const pending = new Map<number, { callback: () => void; delay: number }>();
+    const delays: number[] = [];
+    const scheduler: CommandTimerScheduler = {
+      set(callback, delay) {
+        const id = ++nextId;
+        pending.set(id, { callback, delay });
+        delays.push(delay);
+        return id;
+      },
+      clear(handle) {
+        pending.delete(handle as number);
+      },
+    };
+    return { pending, delays, scheduler };
+  }
+
+  const noTimeout = fakeTimer();
+  let fireCount = 0;
+  startCommandTimeout(0, () => fireCount++, noTimeout.scheduler)();
+  assert.equal(noTimeout.pending.size, 0, "unbounded command creates no timer");
+  assert.equal(fireCount, 0);
+
+  const oneHour = fakeTimer();
+  const cancelOneHour = startCommandTimeout(3_600, () => fireCount++, oneHour.scheduler);
+  assert.deepEqual(oneHour.delays, [3_600_000]);
+  cancelOneHour();
+  assert.equal(oneHour.pending.size, 0, "cancelling a scheduled command clears its timer");
+  assert.equal(fireCount, 0);
+
+  const reachesDeadline = fakeTimer();
+  const clear = startCommandTimeout(1, () => fireCount++, reachesDeadline.scheduler);
+  const first = [...reachesDeadline.pending.values()][0];
+  assert.equal(first?.delay, 1_000);
+  first?.callback();
+  assert.equal(fireCount, 1);
+  clear();
+  assert.equal(fireCount, 1);
+
+  const veryLong = fakeTimer();
+  let longTimeouts = 0;
+  startCommandTimeout(3_000_000, () => longTimeouts++, veryLong.scheduler);
+  const part1 = [...veryLong.pending.values()][0];
+  assert.equal(part1?.delay, 2_147_483_647, "Node timers must not overflow at 24.8 days");
+  part1?.callback();
+  assert.equal(longTimeouts, 0, "large command timeouts must not fire after the first chunk");
+  const part2 = [...veryLong.pending.values()].at(-1);
+  assert.equal(part2?.delay, 3_000_000_000 - 2_147_483_647);
+  part2?.callback();
+  assert.equal(longTimeouts, 1);
+  console.log("  ✓ terminal: default 60s, explicit 3600s, 0 unbounded, cancellation, Node timer overflow");
+}
+
 async function main() {
   // The assertions below were written against the Spanish catalog (the
   // extension's original language); the i18n tests switch locale themselves
@@ -6223,6 +6293,7 @@ async function main() {
   testEnvironment();
   testSkills();
   testEvidenceTails();
+  testCommandTimeouts();
   testPreservedParticipantDirections();
   console.log("commitMessage.ts");
   testCommitMessageValidation();
