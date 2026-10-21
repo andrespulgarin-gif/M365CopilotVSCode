@@ -38,6 +38,9 @@ export function replaceTextOnce(
   newText: string,
   relativePath: string,
 ): string {
+  if (oldText === newText) {
+    throw new Error(t("edit.replaceNoop", relativePath));
+  }
   const direct = findMatch(content, oldText);
   if (direct.kind === "unique") {
     return `${content.slice(0, direct.index)}${newText}${content.slice(direct.index + oldText.length)}`;
