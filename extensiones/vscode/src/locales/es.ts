@@ -508,6 +508,8 @@ export const es: Record<keyof typeof en, string> = {
     "oldText aparece más de una vez en {0}. Incluye más contexto para que sea único.",
   "edit.oldText.noMatch":
     "oldText no coincide con el contenido actual de {0}. Vuelve a leer el archivo.",
+  "edit.replaceNoop":
+    "NO_CHANGE en {0}: oldText y newText son idénticos. No se aplicó ningún cambio funcional. Lee la implementación actual y genera un diff real o informa que el comportamiento solicitado ya estaba implementado. No afirmes que esta llamada lo implementó.",
   "edit.summary":
     "Cambios aplicados en el editor y pendientes de revisión del usuario: {0}. " +
     "El usuario los verá resaltados con las acciones «Keep» y «Undo» encima del cambio. " +
