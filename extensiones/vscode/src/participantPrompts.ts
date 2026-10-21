@@ -58,6 +58,8 @@ export interface ParticipantPromptInput {
   readonly history?: readonly HistoryTurn[];
   /** Workspace-relative paths of other files attached with `#`. */
   readonly attachedPaths?: readonly string[];
+  /** User-pasted text references, which do not arrive in ChatRequest.prompt. */
+  readonly pastedText?: string;
   /** Project context retrieved from the local index (projectIndex.ts), if any. */
   readonly projectContext?: string;
   /** System, shell, workspace root and date (environment.ts). */
@@ -145,6 +147,7 @@ export function buildParticipantFraming(input: ParticipantPromptInput): string {
     sections.push(t("participant.prompt.attached", input.attachedPaths.join(", ")));
   }
   if (input.projectContext) sections.push(input.projectContext);
+  if (input.pastedText) sections.push(input.pastedText);
 
   const request = input.request.trim();
   sections.push(
