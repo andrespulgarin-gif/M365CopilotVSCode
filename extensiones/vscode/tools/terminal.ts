@@ -1,15 +1,14 @@
 import { exec, type ExecException } from "node:child_process";
 import * as vscode from "vscode";
-import { boundedInteger, ensureNotCancelled, resolveWorkspacePath } from "./common";
+import { ensureNotCancelled, resolveWorkspacePath } from "./common";
+import { commandTimeoutSeconds, startCommandTimeout } from "./commandTimeout";
 import { cleanTerminalOutput, truncateOutput, TerminalOutputCapture } from "./terminalOutput";
 import { t } from "../src/i18n";
 import { debug } from "@m365copilot/core/bizchat";
 
 export { looksRisky } from "./commandSafety";
 
-const DEFAULT_TIMEOUT_SECONDS = 60;
-const MAX_TIMEOUT_SECONDS = 300;
-const MAX_COMMAND_CHARS = 4000;
+ const MAX_COMMAND_CHARS = 4000;
 const MAX_OUTPUT_CHARS = 20_000;
 const MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 const TERMINAL_NAME = "M365 Copilot";
@@ -58,20 +57,15 @@ export async function runWorkspaceCommand(
   if (command.length > MAX_COMMAND_CHARS) throw new Error(t("run.tooLong", MAX_COMMAND_CHARS));
 
   const target = resolveWorkspacePath(input.cwd ?? "", input.workspaceFolder, { allowEmpty: true });
-  const timeoutSeconds = boundedInteger(
-    input.timeoutSeconds,
-    DEFAULT_TIMEOUT_SECONDS,
-    1,
-    MAX_TIMEOUT_SECONDS,
-  );
+  const timeoutSeconds = commandTimeoutSeconds(input.timeoutSeconds);
   ensureNotCancelled(token);
 
   const scope = `run#${++runSeq}`;
   const started = Date.now();
   debug(scope, `$ ${command}`, { cwd: target.uri.fsPath, timeoutSeconds });
   const result =
-    (await runInIntegratedTerminal(command, target.uri, timeoutSeconds * 1000, token)) ??
-    (await runHeadless(command, target.uri.fsPath, timeoutSeconds * 1000, token));
+    (await runInIntegratedTerminal(command, target.uri, timeoutSeconds, token)) ??
+    (await runHeadless(command, target.uri.fsPath, timeoutSeconds, token));
   debug(scope, `finished via ${result.channel} in ${Date.now() - started} ms`, () => ({
     exitCode: result.exitCode,
     timedOut: result.timedOut,
@@ -155,7 +149,7 @@ async function awaitShellIntegration(
 async function runInIntegratedTerminal(
   command: string,
   cwd: vscode.Uri,
-  timeoutMs: number,
+  timeoutSeconds: number,
   token: vscode.CancellationToken,
 ): Promise<CommandResult | undefined> {
   let terminal: vscode.Terminal;
@@ -205,10 +199,10 @@ async function runInIntegratedTerminal(
     releaseWait();
   };
 
-  const timer = setTimeout(() => {
+  const clearCommandTimeout = startCommandTimeout(timeoutSeconds, () => {
     timedOut = true;
     disposeStalledTerminal();
-  }, timeoutMs);
+  });
   const cancelListener = token.onCancellationRequested(() => {
     cancelled = true;
     disposeStalledTerminal();
@@ -235,7 +229,7 @@ async function runInIntegratedTerminal(
     disposeStalledTerminal();
     throw error;
   } finally {
-    clearTimeout(timer);
+    clearCommandTimeout();
     cancelListener.dispose();
     endListener?.dispose();
   }
@@ -253,28 +247,30 @@ async function runInIntegratedTerminal(
 function runHeadless(
   command: string,
   cwd: string,
-  timeoutMs: number,
+  timeoutSeconds: number,
   token: vscode.CancellationToken,
 ): Promise<CommandResult> {
   return new Promise((resolve) => {
-    let cancelledByUser = false;
+    let timedOut = false;
     const child = exec(
       command,
-      { cwd, timeout: timeoutMs, maxBuffer: MAX_BUFFER_BYTES, windowsHide: true },
+      { cwd, timeout: 0, maxBuffer: MAX_BUFFER_BYTES, windowsHide: true },
       (error: ExecException | null, stdout, stderr) => {
+        clearCommandTimeout();
         cancelListener.dispose();
         const exitCode = typeof error?.code === "number" ? error.code : error ? null : 0;
         resolve({
           output: cleanTerminalOutput(`${stdout}${stderr}` || error?.message || "", command),
           exitCode,
-          timedOut: Boolean(error?.killed) && !cancelledByUser,
+          timedOut,
           channel: "headless",
         });
       },
     );
-    const cancelListener = token.onCancellationRequested(() => {
-      cancelledByUser = true;
+    const clearCommandTimeout = startCommandTimeout(timeoutSeconds, () => {
+      timedOut = true;
       child.kill();
     });
+    const cancelListener = token.onCancellationRequested(() => child.kill());
   });
 }
