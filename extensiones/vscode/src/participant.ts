@@ -24,6 +24,7 @@ import {
   type CodeContext,
 } from "./editorContext";
 import type { EditorHandoff } from "./editorActions";
+import { pastedTextOf, renderPastedText } from "./attachmentText";
 import { MarkdownStreamFormatter } from "./markdown";
 import { findModel } from "./models";
 import {
@@ -167,6 +168,7 @@ async function handleRequest(
 
   // Screenshots pasted or attached in the chat go with every step, uploaded like the web app does.
   const images = await imagesOf(request.references);
+  const pastedText = renderPastedText(await pastedTextOf(request.references));
   const framing =
     buildParticipantFraming({
       command,
@@ -175,6 +177,7 @@ async function handleRequest(
       terminal,
       history,
       attachedPaths,
+      pastedText,
       projectContext,
       environment: currentEnvironment(),
       skills: currentSkills(),
