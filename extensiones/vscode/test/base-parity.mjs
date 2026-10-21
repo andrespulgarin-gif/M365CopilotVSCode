@@ -7,7 +7,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../../..");
 const contract = JSON.parse(readFileSync(resolve(here, "fixtures/full-base-contract.json"), "utf8"));
 const pkg = JSON.parse(readFileSync(resolve(root, "extensiones/vscode/package.json"), "utf8"));
-assert.equal(pkg.version, "3.0.5");
+assert.equal(pkg.version, "3.0.6");
 for (const [key, expected] of Object.entries(contract.manifestHashes)) {
   assert.equal(createHash("sha256").update(JSON.stringify(pkg[key])).digest("hex"), expected, `baseline manifest contract changed: ${key}`);
 }
