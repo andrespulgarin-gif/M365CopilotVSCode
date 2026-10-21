@@ -498,6 +498,8 @@ export const en = {
   "edit.oldText.multiple":
     "oldText appears more than once in {0}. Include more context so it is unique.",
   "edit.oldText.noMatch": "oldText does not match the current content of {0}. Read the file again.",
+  "edit.replaceNoop":
+    "NO_CHANGE in {0}: oldText and newText are identical. No functional change was applied. Read the current implementation and either produce a real diff or report that the requested behavior is already present. Do not claim this call implemented it.",
   "edit.summary":
     "Changes applied in the editor and pending the user’s review: {0}. The user will see them highlighted with the " +
     "“Keep” and “Undo” actions above the change. They are not saved to disk yet and the user can revert them, so do " +
