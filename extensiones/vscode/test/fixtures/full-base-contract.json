@@ -34,7 +34,6 @@
     "extensiones/vscode/tools/listFiles.ts": "bda63a3f2394725d3f3b3ce59cf90113e20dbe1228bc2bdd8a74d28d8376eded",
     "extensiones/vscode/tools/editFields.ts": "93fce4fb8ea3398132616719c786f02d96ad6b56a72e5fed6c27256c20a50aa5",
     "extensiones/vscode/tools/git.ts": "8b0910ce71f3aa7cdaed4b70b7f53e05b6598e48f8a00f21bed3bf02c80b750d",
-    "extensiones/vscode/tools/replaceText.ts": "40ee33662b1df61d35055527a86646197094ea8e2a1e1b52a27a3cbda38e4963",
     "extensiones/vscode/tools/common.ts": "b3237d6c10820ce56ecfbae2845fa63fd0b5413665b3096aa42d889b0bbbd16f",
     "extensiones/vscode/tools/deepwiki.ts": "c4ad8a239649e606b67b271e4a5462a61542fcef58b759ae38970a1836931c23",
     "extensiones/vscode/tools/gitExtension.ts": "34467a208b24a93272afc3ce93da9f7712b0088f8287ee5da2529e3c6795fc0a",
@@ -59,7 +58,6 @@
     "extensiones/vscode/src/reviewPrompt.ts": "d3e5ef67683322b1849e38e5163e1ea5ee41762dcfc9eb91971b99caa10eb4fe",
     "extensiones/vscode/src/editorContext.ts": "9f22270f8461e4f0dba73de1cc8f107182c5f505ff648d1b0f23ba75695622f8",
     "extensiones/vscode/src/webSearchPrompt.ts": "95bd8b01015c4a93fedccacabfcfe0786ea1e1352d8e1b44b434ad669c5767f4",
-    "extensiones/vscode/src/participant.ts": "8cf0abce27e0ab6a516a86530ecad05965397da805933851d701ea7722f7a1a4",
     "extensiones/vscode/src/review.ts": "95e6b427059019b8ce3257fa5850d26a81c8251b0090a13a89df7c8bae9d0259",
     "extensiones/vscode/src/extension.ts": "c9e903263cd5ec427a7c477b1a5fd7c4f0d106c99b52a2878d264f67827b19c1",
     "extensiones/vscode/src/environment.ts": "bda04d20c38e52674d59378eef3cf991acad9d442c77d150e05176d2bf9526cb",
@@ -152,5 +150,9 @@
     "packages/core/src/bizchat/locales/es.ts": "5dac082a7f4957696143bba179ff3cf7a7c4e5c35e7cfdc62c8086c32c3eaa9e",
     "packages/core/src/bizchat/locales/zh.ts": "f6cdfed2a43e3d8a380913390744873919f2792bdadab87c9746d4b5a83e1863",
     "packages/core/src/bizchat/locales/en.ts": "311fe27255a338b218f9da03eb82181ba3a6c752fe970e2c69ab9c8ff1b3f39f"
-  }
+  },
+  "intentionallyChangedFiles": [
+    "extensiones/vscode/tools/replaceText.ts",
+    "extensiones/vscode/src/participant.ts"
+  ]
 }
