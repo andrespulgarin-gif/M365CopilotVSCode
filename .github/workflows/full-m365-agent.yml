@@ -2,7 +2,7 @@ name: Full M365 agent
 
 on:
   push:
-    branches: [fix-full-m365-agent, fix-m365-agent-noop-attachments]
+    branches: [fix-full-m365-agent, fix-m365-agent-noop-attachments, fix-m365-long-terminal-3-0-7]
   workflow_dispatch:
 
 permissions:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/fix-full-m365-agent' || github.ref == 'refs/heads/fix-m365-agent-noop-attachments'
+    if: github.ref == 'refs/heads/fix-full-m365-agent' || github.ref == 'refs/heads/fix-m365-agent-noop-attachments' || github.ref == 'refs/heads/fix-m365-long-terminal-3-0-7'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -34,7 +34,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - name: Lint changed production sources
-        run: pnpm --filter m365-copilot-vscode exec oxlint src/locales/en.ts src/locales/es.ts src/subagentCore.ts src/participant.ts src/attachmentText.ts src/participantPrompts.ts src/transcript.ts tools/replaceText.ts tools/terminal.ts tools/terminalOutput.ts
+        run: pnpm --filter m365-copilot-vscode exec oxlint src/locales/en.ts src/locales/es.ts src/subagentCore.ts src/participant.ts src/attachmentText.ts src/participantPrompts.ts src/transcript.ts tools/replaceText.ts tools/terminal.ts tools/commandTimeout.ts tools/terminalOutput.ts
       - run: pnpm build
       - run: pnpm test
       - run: pnpm package:vscode
@@ -47,7 +47,7 @@ jobs:
           mkdir -p /tmp/full-m365-evidence
           git archive --format=zip --prefix=M365CopilotVSCode/ HEAD > /tmp/full-m365-evidence/M365CopilotVSCode-source.zip
           git rev-parse HEAD > /tmp/full-m365-evidence/SOURCE_COMMIT.txt
-          git diff c062fe6a5d032068600f909d17ea36cd2dae663c HEAD -- extensiones/vscode > /tmp/full-m365-evidence/full-m365-3.0.6.patch
+          git diff c062fe6a5d032068600f909d17ea36cd2dae663c HEAD -- extensiones/vscode > /tmp/full-m365-evidence/full-m365-3.0.7.patch
           sha256sum releases/vscode/*.vsix > releases/vscode/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
