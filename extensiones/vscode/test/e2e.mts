@@ -142,6 +142,7 @@ import { describeShell, localDate, renderEnvironment } from "../src/environment.
 import { renderSkills } from "../src/skills.ts";
 import { ConcurrencyLimiter, clip, runSubagentTask, runToolLoop } from "../src/subagentCore.ts";
 import { replaceTextOnce } from "../tools/replaceText.ts";
+import { pastedTextOf, renderPastedText } from "../src/attachmentText.ts";
 import { TerminalOutputCapture, cleanTerminalOutput, truncateOutput } from "../tools/terminalOutput.ts";
 import {
   looksLikeGiveUp,
@@ -516,6 +517,11 @@ function testToolProtocol() {
   assert.equal(streamed.join(""), codeChunks.join(""));
 
   assert.equal(replaceTextOnce("uno\ndos\n", "dos", "tres", "demo.txt"), "uno\ntres\n");
+  assert.throws(
+    () => replaceTextOnce("already implemented", "already implemented", "already implemented", "code.java"),
+    /NO_CHANGE/,
+    "identical replacements must not be reported as implemented",
+  );
   assert.throws(() => replaceTextOnce("uno uno", "uno", "dos", "demo.txt"), /más de una vez/);
   console.log("  ✓ tool protocol decodes calls (preamble, fenced) and guards replacements");
 }
@@ -6154,6 +6160,43 @@ async function testNoLabLimitsOrCompletionGate() {
 }
 
 
+async function testPastedTextReferences() {
+  const large = "RETAIN THE EXACT WORDING\n" + "original answer and constraints\n".repeat(1_600);
+  const refs = [
+    { id: "Pasted text #1", modelDescription: "Pasted text #1", value: large },
+    {
+      id: "Pasted text #2",
+      value: { mimeType: "text/plain", data: async () => new TextEncoder().encode("Opus response from pasted attachment") },
+    },
+    {
+      id: "Pasted text #3",
+      value: { mimeType: "text/markdown", data: async () => new TextEncoder().encode("# Prior decisions\nkeep all constraints") },
+    },
+    { id: "vscode.implicit.selection", value: "duplicated implicit editor context" },
+    { id: "image reference", value: { mimeType: "image/png", data: async () => new TextEncoder().encode("png") } },
+  ];
+  const collected = await pastedTextOf(refs);
+  assert.equal(collected.length, 3);
+  assert.equal(collected[0]?.text, large);
+  const attached = renderPastedText(collected);
+  assert.ok(attached.includes(large), "long pasted text must be preserved without truncation");
+  assert.ok(attached.includes("Opus response from pasted attachment"));
+  assert.ok(!attached.includes("duplicated implicit editor context"));
+  const framed = buildParticipantFraming({
+    command: undefined,
+    request: "Save the pasted prompt and prior answers; DO NOT execute.",
+    pastedText: attached,
+  });
+  assert.ok(framed.includes(large));
+  assert.match(framed, /DO NOT execute/);
+  const broken = await pastedTextOf([{
+    id: "broken",
+    value: { mimeType: "text/plain", data: async () => { throw new Error("inaccessible"); } },
+  }]);
+  assert.match(broken[0]?.text ?? "", /could not be read/);
+  console.log("  ✓ @m365 pasted text references: exact content, two MIME types, no hidden truncation");
+}
+
 async function main() {
   // The assertions below were written against the Spanish catalog (the
   // extension's original language); the i18n tests switch locale themselves
@@ -6222,6 +6265,7 @@ async function main() {
   testLineDiff();
   console.log("participant / editor");
   testParticipantPrompts();
+  await testPastedTextReferences();
   testCommitMessageGeneration();
   testCommitMessageNormalization();
   testCommitContext();
