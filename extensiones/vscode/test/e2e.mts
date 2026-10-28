@@ -3521,7 +3521,7 @@ function testPromptsFollowLocale() {
   const english = render("en");
   const spanish = render("es");
 
-  assert.match(english, /IMPORTANT: you DO have real access/);
+  assert.match(english, /writing structured command requests for an external VS Code host/);
   assert.match(english, /read_file \(native to VS Code\)/);
   assert.match(english, new RegExp(`${M365_TOOL_NAMES.readFile} \\(from this extension\\)`));
   assert.doesNotMatch(
@@ -3529,8 +3529,16 @@ function testPromptsFollowLocale() {
     /herramienta|IMPORTANTE|de esta extensión/,
     "no debe quedar español en el prompt inglés",
   );
-  assert.match(spanish, /IMPORTANTE: SÍ tienes acceso real/);
+  assert.match(spanish, /solicitudes estructuradas de comandos para un anfitrión externo de VS Code/);
   assert.match(spanish, /read_file \(nativa de VS Code\)/);
+  assert.match(english, /Outputting a command request is NOT a claim/);
+  assert.match(spanish, /Emitir una solicitud NO significa afirmar/);
+  setLocale("en");
+  const englishReminder = buildToolProtocolReminder(buildToolCatalog(M365_TOOLS));
+  setLocale("es");
+  const spanishReminder = buildToolProtocolReminder(buildToolCatalog(M365_TOOLS));
+  assert.match(englishReminder, /TEXT OUTPUT PROTOCOL for an external VS Code host/);
+  assert.match(spanishReminder, /PROTOCOLO DE SALIDA DE TEXTO para un anfitrión externo de VS Code/);
   // The protocol markers themselves never change with the language.
   for (const prompt of [english, spanish]) {
     assert.match(prompt, /<m365_tool_call>/);
