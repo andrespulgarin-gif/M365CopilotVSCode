@@ -3147,7 +3147,7 @@ async function testToolLoopEvidenceRecovery() {
     "I cannot confirm the QNT settings because we have not yet retrieved runtime configuration from Kubernetes.";
   const call = '<m365_tool_call>{"name":"' + M365_TOOL_NAMES.searchText
     + '","input":{"query":"allowmultipleenrollment"}}</m365_tool_call>';
-  const messages = [reply(incomplete), reply(call), reply("QNT property = false (local source).")];
+  const messages = [reply(call), reply(incomplete), reply(call), reply("QNT property = false (local source).")];
   const server = await startProtocolServer((send, connection) =>
     messages[connection.index]?.(send),
   );
@@ -3165,12 +3165,12 @@ async function testToolLoopEvidenceRecovery() {
       onProse: (delta) => emitted.push(delta),
     });
     assert.equal(result.outcome, "done");
-    assert.equal(result.steps, 2);
+    assert.equal(result.steps, 3);
     assert.equal(result.summary, "QNT property = false (local source).");
-    assert.equal(server.connections.length, 3);
+    assert.equal(server.connections.length, 4);
     assert.equal(emitted.join(""), "QNT property = false (local source).");
-    assert.ok(promptOf(server.connections[1]).includes(t("protocol.force.evidenceGap")));
-    assert.ok(!promptOf(server.connections[2]).includes(t("protocol.force.evidenceGap")));
+    assert.ok(promptOf(server.connections[2]).includes(t("protocol.force.evidenceGap")));
+    assert.ok(!promptOf(server.connections[3]).includes(t("protocol.force.evidenceGap")));
   } finally {
     server.close();
   }
