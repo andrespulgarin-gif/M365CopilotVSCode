@@ -26,7 +26,7 @@ function decodeEntities(value: string): string {
 
 function attribute(attrs: string, name: string): string | undefined {
   const match = new RegExp("\\b" + name + "\\s*=\\s*([\"'])(.*?)\\1", "i").exec(attrs);
-  return match ? decodeEntities(match[2]) : undefined;
+  return match?.[2] !== undefined ? decodeEntities(match[2]) : undefined;
 }
 
 function textLabel(raw: string | undefined): string {
@@ -62,7 +62,7 @@ function pageText(name: string, body: string): string[] {
   let count = 0;
   for (const match of xml.matchAll(/<mxCell\b([^>]*?)\/?>/gi)) {
     if (++count > MAX_LABELS_PER_PAGE * 3) break;
-    const attrs = match[1];
+    const attrs = match[1] ?? "";
     const id = attribute(attrs, "id") ?? "";
     const label = textLabel(attribute(attrs, "value"));
     if (attribute(attrs, "edge") === "1") {
@@ -93,7 +93,7 @@ export function drawioSearchText(source: string): string {
   const pages = [...source.matchAll(/<diagram\b([^>]*)>([\s\S]*?)<\/diagram>/gi)];
   if (pages.length > 0) {
     for (const page of pages.slice(0, 12)) {
-      lines.push(...pageText(attribute(page[1], "name") ?? "Untitled", page[2]));
+      lines.push(...pageText(attribute(page[1] ?? "", "name") ?? "Untitled", page[2] ?? ""));
       if (lines.join("\n").length >= MAX_RENDERED_CHARS) break;
     }
   } else if (source.includes("<mxGraphModel")) {

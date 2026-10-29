@@ -351,18 +351,26 @@ export class ProjectIndexService implements vscode.Disposable {
     );
     // Reserve a small share for documentation instead of allowing a large
     // Java checkout to exhaust the entire index before a single MD is selected.
-    const documentQuota = Math.min(500, Math.floor(settings.maxFiles / 5));
+    const documentQuota = Math.min(120, Math.floor(settings.maxFiles / 10));
     const documents = files
       .filter((file) => {
         const family = languageOf(file.path)?.family;
         return family === "markdown" || family === "text";
       })
       .slice(0, documentQuota);
-    const chosen = [...documents];
-    const picked = new Set(chosen.map((file) => file.path));
-    for (const file of files) {
-      if (chosen.length >= settings.maxFiles) break;
-      if (!picked.has(file.path)) chosen.push(file);
+    const documentPaths = new Set(documents.map((file) => file.path));
+    const otherFiles = files.filter((file) => !documentPaths.has(file.path));
+    const chosen: Candidate[] = [];
+    let doc = 0;
+    let other = 0;
+    while (chosen.length < settings.maxFiles &&
+      (doc < documents.length || other < otherFiles.length)) {
+      for (let slot = 0; slot < 8 && other < otherFiles.length &&
+        chosen.length < settings.maxFiles; slot += 1) {
+        chosen.push(otherFiles[other++]!);
+      }
+      if (doc < documents.length && chosen.length < settings.maxFiles)
+        chosen.push(documents[doc++]!);
     }
     return { files: chosen, truncated: files.length > settings.maxFiles };
   }
