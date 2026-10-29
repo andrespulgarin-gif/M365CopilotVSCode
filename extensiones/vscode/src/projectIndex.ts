@@ -20,6 +20,8 @@
 import * as vscode from "vscode";
 import { registerTracedCommand, registerTracedTool } from "./debugMode";
 import { languageOf } from "./rag/code";
+import { drawioSearchText } from "./rag/diagram";
+import { evidenceFileHints, isEvidencePath, renderEvidenceHints } from "./rag/references";
 import {
   formatAutoContext,
   formatSearchResults,
@@ -123,6 +125,7 @@ export class ProjectIndexService implements vscode.Disposable {
   private current = new SearchIndex();
   private readonly uris = new Map<string, vscode.Uri>();
   private readonly gitFolders = new Set<string>();
+  private evidencePaths: string[] = [];
   private state: IndexState = "idle";
   private durationMs: number | undefined;
   private truncated = false;
@@ -217,6 +220,7 @@ export class ProjectIndexService implements vscode.Disposable {
     const reset = (state: IndexState) => {
       this.current = new SearchIndex();
       this.uris.clear();
+      this.evidencePaths = [];
       this.truncated = false;
       this.setState(state);
     };
@@ -240,6 +244,10 @@ export class ProjectIndexService implements vscode.Disposable {
           for (const folder of folders)
             discovered.push(...(await this.discover(folder, tokenSource.token)));
           const selection = this.select(discovered, settings);
+          const discoveredEvidence = [...new Set(discovered
+            .map((uri) => this.pathOf(uri))
+            .filter((path): path is string => !!path && isEvidencePath(path)))];
+          if (generation === this.generation) this.evidencePaths = discoveredEvidence;
           truncated = selection.truncated;
           let chars = 0;
           for (let start = 0; start < selection.files.length; start += BATCH_SIZE) {
@@ -341,14 +349,33 @@ export class ProjectIndexService implements vscode.Disposable {
         depthOf(a.path) - depthOf(b.path) ||
         a.path.localeCompare(b.path),
     );
-    return files.length > settings.maxFiles
-      ? { files: files.slice(0, settings.maxFiles), truncated: true }
-      : { files, truncated: false };
+    // Reserve a small share for documentation instead of allowing a large
+    // Java checkout to exhaust the entire index before a single MD is selected.
+    const documentQuota = Math.min(500, Math.floor(settings.maxFiles / 5));
+    const documents = files
+      .filter((file) => {
+        const family = languageOf(file.path)?.family;
+        return family === "markdown" || family === "text";
+      })
+      .slice(0, documentQuota);
+    const chosen = [...documents];
+    const picked = new Set(chosen.map((file) => file.path));
+    for (const file of files) {
+      if (chosen.length >= settings.maxFiles) break;
+      if (!picked.has(file.path)) chosen.push(file);
+    }
+    return { files: chosen, truncated: files.length > settings.maxFiles };
   }
 
   private async analyze(candidate: Candidate, maxBytes: number): Promise<IndexedFile | undefined> {
-    const text = await this.readText(candidate.uri, maxBytes);
-    if (text === undefined || text.length > maxBytes || looksGenerated(text)) return undefined;
+    const diagram = candidate.path.toLowerCase().endsWith(".drawio");
+    const documentation = /\.(?:md|mdx|markdown|txt)$/i.test(candidate.path);
+    const sizeLimit = diagram ? Math.max(maxBytes, 3_000_000)
+      : documentation ? Math.max(maxBytes, 1_000_000) : maxBytes;
+    const source = await this.readText(candidate.uri, sizeLimit);
+    if (source === undefined) return undefined;
+    const text = diagram ? drawioSearchText(source) : source;
+    if (!text || text.length > sizeLimit || (!diagram && looksGenerated(text))) return undefined;
     return analyzeFile(candidate.path, text);
   }
 
@@ -375,7 +402,9 @@ export class ProjectIndexService implements vscode.Disposable {
   ): Promise<string[] | undefined> => {
     const uri = this.uris.get(path);
     if (!uri) return undefined;
-    const text = await this.readText(uri, Number.MAX_SAFE_INTEGER);
+    const source = await this.readText(uri, 3_000_000);
+    const text = source !== undefined && path.toLowerCase().endsWith(".drawio")
+      ? drawioSearchText(source) : source;
     return text
       ?.replace(/\r\n?/g, "\n")
       .split("\n")
@@ -393,6 +422,12 @@ export class ProjectIndexService implements vscode.Disposable {
     if (this.state === "disabled" || this.state === "untrusted" || this.state === "idle") return;
     const path = this.pathOf(uri);
     if (!path || isSkippedPath(path)) return;
+    if (isEvidencePath(path)) {
+      this.evidencePaths = deleted
+        ? this.evidencePaths.filter((item) => item !== path)
+        : this.evidencePaths.includes(path) ? this.evidencePaths : [...this.evidencePaths, path];
+      this.contextCache = undefined;
+    }
     // A deleted folder has no extension; a changed file without a known language is never indexed.
     if (!deleted && !languageOf(path)) return;
     this.pending.set(path, { uri, deleted });
@@ -553,9 +588,11 @@ export class ProjectIndexService implements vscode.Disposable {
       maxLines: 40,
       maxChars: Math.max(500, maxChars - summary.length - 600),
     });
-    const value = formatAutoContext(summary, rendered, notRendered(hits, rendered), (path) =>
+    const context = formatAutoContext(summary, rendered, notRendered(hits, rendered), (path) =>
       this.fenceLanguage(path),
     );
+    const hints = renderEvidenceHints(evidenceFileHints(query, this.evidencePaths, 6));
+    const value = hints ? (context.slice(0, Math.max(0, maxChars - hints.length - 2)) + "\n\n" + hints) : context;
     this.contextCache = { key, value };
     this.log(t("log.indexContext", hits.length, rendered.length, value.length));
     debug("index", `context for the request (${value.length} chars)`, () => ({
@@ -612,7 +649,12 @@ export class ProjectIndexService implements vscode.Disposable {
     const result = formatSearchResults(query, rendered, notRendered(hits, rendered), (path) =>
       this.fenceLanguage(path),
     );
-    return this.truncated ? `${result}\n\n${t("rag.truncated")}` : result;
+    const hints = renderEvidenceHints(evidenceFileHints(query, this.evidencePaths));
+    const fallback = hits.length === 0
+      ? "Indexed text search found no matching content. This does not establish that the file or evidence is unavailable. Check filenames with file_search/list_dir; inspect relevant files or logs using the offered host tools."
+      : "";
+    return [hints, result, fallback, this.truncated ? t("rag.truncated") : ""]
+      .filter(Boolean).join("\n\n");
   }
 
   private async mapTool(input: ProjectMapInput): Promise<string> {

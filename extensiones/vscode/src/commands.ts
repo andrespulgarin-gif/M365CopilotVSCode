@@ -310,6 +310,9 @@ export async function refreshModels(registry: ModelRegistry, store: ProfileStore
 async function openChatWith(modelId: string): Promise<void> {
   await vscode.commands.executeCommand("workbench.action.chat.open", {
     modelSelector: { vendor: "m365copilot", id: modelId },
+    query: "@m365 ",
+    isPartialQuery: true,
+    mode: "ask",
   });
 }
 

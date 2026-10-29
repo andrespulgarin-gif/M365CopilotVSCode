@@ -68,6 +68,7 @@ const LANGUAGES: Readonly<Record<string, FileLanguage>> = (() => {
   add("sql", "SQL", "sql");
   add("markdown", "Markdown", "md mdx markdown");
   add("text", "Text", "txt rst adoc");
+  add("text", "Draw.io diagram", "drawio");
   add("style", "CSS", "css scss sass less styl");
   add("markup", "HTML", "html htm xhtml");
   add("markup", "XML", "xml xaml csproj fsproj vbproj props targets plist");

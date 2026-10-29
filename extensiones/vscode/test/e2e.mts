@@ -101,6 +101,9 @@ import {
   tokenize,
 } from "../src/rag/text.ts";
 import { chunkLines, extractImports, extractSymbols, languageOf } from "../src/rag/code.ts";
+import { drawioSearchText } from "../src/rag/diagram.ts";
+import { evidenceFileHints, isEvidencePath, renderEvidenceHints } from "../src/rag/references.ts";
+import { deflateRawSync } from "node:zlib";
 import { analyzeFile, bestWindow, SearchIndex } from "../src/rag/searchIndex.ts";
 import {
   formatAutoContext,
@@ -4994,6 +4997,41 @@ function testUnifiedDiff() {
 
 // ---- rag/text.ts -------------------------------------------------------------
 
+function testEvidenceDiscoveryAndDiagram() {
+  const xml = '<mxfile><diagram name="FulfillOffer vs Enrollment"><mxGraphModel><root>'
+    + '<mxCell id="1" value="PartnerAPI.enrollment()"/>'
+    + '<mxCell id="2" value="&lt;b&gt;Indicative Enrichment&lt;/b&gt;"/>'
+    + '<mxCell id="3" edge="1" source="1" target="2"/>'
+    + '</root></mxGraphModel></diagram></mxfile>';
+  const extracted = drawioSearchText(xml);
+  assert.ok(extracted.includes("Page: FulfillOffer vs Enrollment"));
+  assert.ok(extracted.includes("Node: PartnerAPI.enrollment()"));
+  assert.ok(extracted.includes("Flow: PartnerAPI.enrollment() -> Indicative Enrichment"));
+  const compressedBody = '<mxGraphModel><root><mxCell id="1" value="ActiveEnrollment"/></root></mxGraphModel>';
+  const compressed = deflateRawSync(Buffer.from(encodeURIComponent(compressedBody))).toString("base64");
+  assert.ok(drawioSearchText('<mxfile><diagram name="GCCS">' + compressed + '</diagram></mxfile>')
+    .includes("ActiveEnrollment"), "compressed draw.io pages are searchable");
+  assert.equal(drawioSearchText('<mxfile><diagram name="corrupt">not-base64</diagram></mxfile>')
+    .includes("Page content could not be extracted"), true);
+  assert.deepEqual(languageOf("architecture.drawio"), {
+    family: "text", label: "Draw.io diagram",
+  });
+  const paths = [
+    "CCS_SOAP_TO_PARTNERAPI_REST_DESIGN.drawio",
+    "docs/Enrollment_Rollover.md",
+    "service_logs/GlobalCreditCore.log",
+    "src/SomeJava.java",
+  ];
+  assert.equal(isEvidencePath(paths[2]), true);
+  assert.deepEqual(evidenceFileHints("CCS_SOAP_TO_PARTNERAPI_REST_DESIGN.drawio", paths),
+    [paths[0]]);
+  assert.ok(evidenceFileHints("enrollment rollover documentation", paths).includes(paths[1]));
+  assert.ok(evidenceFileHints("GCCS logs", paths).includes(paths[2]));
+  assert.equal(evidenceFileHints("How does one plus one work?", paths).length, 0);
+  assert.ok(renderEvidenceHints([paths[2]]).includes("contents have NOT been read"));
+  console.log("  ✓ RAG project evidence: draw.io XML/compressed pages, file names and log safety");
+}
+
 function testRagText() {
   assert.deepEqual(splitIdentifier("getHTTPResponse_code"), ["get", "HTTP", "Response", "code"]);
   assert.deepEqual(splitIdentifier("my-kebab-name"), ["my", "kebab", "name"]);
@@ -6361,6 +6399,7 @@ async function main() {
   testReviewFindings();
   testUnifiedDiff();
   testRagText();
+  testEvidenceDiscoveryAndDiagram();
   testRagCode();
   testRagSearch();
   await testRagRendering();
