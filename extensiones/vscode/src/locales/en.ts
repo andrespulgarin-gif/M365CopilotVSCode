@@ -357,6 +357,12 @@ export const en = {
     "any tool. You can: the files and commands of this workspace are real and reachable through the tools listed " +
     "above, and the marker runs them on the user's machine. Do not ask the user to paste or upload anything; reply " +
     "with the tool call for the next step.",
+  "protocol.force.evidenceGap":
+    "Your previous reply admitted that required local/runtime evidence was not yet retrieved although you already used " +
+    "workspace tools. This is unfinished investigation, not a reason to finalize. Do not repeat the diagnosis or ask the " +
+    "user to perform an already-authorized lookup. Make the next targeted read, search, or read-only command with an offered " +
+    "tool now, respecting the user's scope and host approvals. If access was denied or the tool returns a real blocker, report " +
+    "that specific blocker and do not retry denied actions.",
   "protocol.force.sandbox":
     "Note: in an earlier attempt at this request you worked in your own cloud sandbox (/mnt/data, /home/…). That is " +
     "not the user's machine: nothing in it is in this workspace, and nothing you create there reaches it. Use only " +

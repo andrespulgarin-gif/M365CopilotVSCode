@@ -97,6 +97,30 @@ export function looksLikeRemoteSandbox(text: string): boolean {
 export type ToolFreeProblem = "giveUp" | "sandbox";
 
 /**
+ * An investigative answer that admits it did not retrieve required evidence
+ * should not silently finish after a successful workspace read/search.
+ * Narrowly match an admitted missing *action*, not an honest unknown result.
+ */
+export function looksLikeUnretrievedEvidence(text: string): boolean {
+  const evidence = /\b(?:configurations?|settings?|properties|files?|logs?|runtime|evidence|values?|records?|source|configuraci[oó]n|propiedades|archivos?|registros?|datos|valores|evidencia)\b/i;
+  if (text.length < MIN_CHARS || !evidence.test(text)) return false;
+  const unfinished = [
+    /\b(?:i|we)\s+(?:have|had)\s+not\s+(?:yet\s+)?(?:retrieved|read|inspected|checked|queried|verified|opened|examined)\b/i,
+    /\b(?:i|we)\s+(?:haven't|hadn't|didn't)\s+(?:yet\s+)?(?:retrieved|read|inspected|checked|queried|verified|opened|examined)\b/i,
+    /\bno\s+(?:(?:runtime|configuration|config|properties|settings|log|file|evidence)\s+){1,4}(?:read|query|inspection|retrieval)\s+(?:was|has been)\s+(?:retrieved|performed|attempted|done)\b/i,
+    /\b(?:not\s+yet|still\s+not)\s+(?:retrieved|read|verified|checked|inspected)\b/i,
+    /\b(?:no\s+(?:he|hemos|se\s+ha|se\s+han)|a[uú]n\s+no\s+(?:he|hemos))\s+(?:le[ií]do|consultado|revisado|recuperado|obtenido|verificado|inspeccionado)\b/i,
+    /\b(?:falta|sin)\s+(?:consultar|revisar|leer|recuperar|obtener|verificar|inspeccionar)\b/i,
+  ];
+  return unfinished.some((pattern) => pattern.test(text));
+}
+
+/** Do not retry a tool action the host or user refused. */
+export function toolAccessDenied(text: string): boolean {
+  return /\b(?:permission denied|access denied|approval denied|user (?:cancelled|canceled|denied)|401 unauthorized|403 forbidden|operation (?:cancelled|canceled)|permiso denegado|acceso denegado|usuario cancel[oó]|usuario deneg[oó])\b/i.test(text);
+}
+
+/**
  * What is wrong with a reply that called no tool although tools were offered,
  * or null when it is a real answer. `remoteWork`: the service reported the
  * model running something in its sandbox during the turn.

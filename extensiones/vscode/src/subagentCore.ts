@@ -19,7 +19,7 @@ import {
   type OfferedTool,
   type ToolCatalog,
 } from "@m365copilot/core/bizchat";
-import { looksLikeRemoteSandbox, ProseHold, toolFreeProblem, type ToolFreeProblem } from "./giveUp";
+import { looksLikeRemoteSandbox, looksLikeUnretrievedEvidence, toolAccessDenied, ProseHold, toolFreeProblem, type ToolFreeProblem } from "./giveUp";
 import { condenseToolResult, toolResultBudgets } from "./transcript";
 import { t } from "./i18n";
 
@@ -197,6 +197,7 @@ export async function runToolLoop(params: ToolLoopParams): Promise<ToolLoopResul
   // One forced retry per loop when a step gives up or works in M365's own
   // sandbox instead of calling a tool (giveUp.ts); its note goes after the prompt.
   let forced: ToolFreeProblem | null = null;
+  let evidenceRecoveryUsed = false;
   let forcedNote = "";
   const wallClockBudgetMs = params.maxWallClockMs ?? MAX_TASK_WALL_CLOCK_MS;
 
@@ -219,7 +220,11 @@ export async function runToolLoop(params: ToolLoopParams): Promise<ToolLoopResul
     let remoteWork = false;
     // While a step's reply is short and has not called a tool, its prose is
     // held back: a give-up is then retried before anyone sees it.
-    const held = new ProseHold((delta) => params.onProse?.(delta));
+    // Retain the final investigation answer long enough to catch a premature
+    // "not yet retrieved" conclusion before it reaches the chat. Tool calls
+    // still flush immediately, as before.
+    const held = new ProseHold((delta) => params.onProse?.(delta),
+      steps.length > 0 && !evidenceRecoveryUsed ? 12_000 : undefined);
     if (!toolsOffered || forced) held.flush();
     // The step's turn ends as soon as its tool call is complete: what the
     // model writes after it is ignored anyway, and can run for minutes.
@@ -285,6 +290,18 @@ export async function runToolLoop(params: ToolLoopParams): Promise<ToolLoopResul
     }
 
     if (!call) {
+      // One extra chance to finish an explicitly admitted missing read/search
+      // instead of reporting it as an unavailable workspace fact.
+      if (toolsOffered && !forced && !evidenceRecoveryUsed && steps.length > 0 &&
+        held.holding && looksLikeUnretrievedEvidence(text) &&
+        !toolAccessDenied(lastResultText)) {
+        evidenceRecoveryUsed = true;
+        forcedNote = "\n\n" + t("protocol.force.evidenceGap");
+        log("Investigation admitted an unperformed evidence retrieval; continuing once with tools");
+        held.discard();
+        step -= 1;
+        continue;
+      }
       // Gave up, or worked in its own sandbox: the same step once more, with
       // a note that says what is true (the dropped reply was never shown).
       const problem: ToolFreeProblem | null =

@@ -158,6 +158,8 @@ import {
   ProseHold,
   PROSE_HOLD_CHARS,
   toolFreeProblem,
+  looksLikeUnretrievedEvidence,
+  toolAccessDenied,
 } from "../src/giveUp.ts";
 import {
   buildCommitMessagePrompt,
@@ -3093,6 +3095,23 @@ function testGiveUpDetection() {
     "el sandbox pesa más",
   );
   assert.equal(toolFreeProblem("Done."), null);
+  assert.equal(looksLikeUnretrievedEvidence(
+    "I cannot claim effective QNT configuration because we have not yet retrieved runtime configuration from Kubernetes."
+  ), true);
+  assert.equal(looksLikeUnretrievedEvidence(
+    "No configuration read was retrieved for the values of QNT."
+  ), true);
+  assert.equal(looksLikeUnretrievedEvidence(
+    "No hemos consultado todavía los valores de configuración del entorno."
+  ), true);
+  assert.equal(looksLikeUnretrievedEvidence(
+    "The configuration was checked successfully; QNT reenrollment is disabled."
+  ), false);
+  assert.equal(looksLikeUnretrievedEvidence(
+    "QNT's effective value remains unknown after querying Kubernetes, which returned 403."
+  ), false);
+  assert.equal(toolAccessDenied("Error: approval denied by user"), true);
+  assert.equal(toolAccessDenied("No errors; reading configuration"), false);
 
   const out: string[] = [];
   const hold = new ProseHold((text) => out.push(text), 10);
@@ -3115,6 +3134,85 @@ function testGiveUpDetection() {
   console.log(
     "  ✓ detecta rendiciones (inglés y español) y el sandbox remoto sin confundirlos con respuestas normales",
   );
+}
+
+
+/** Read-only investigation: an admitted unfinished lookup causes one bounded tool continuation. */
+async function testToolLoopEvidenceRecovery() {
+  const reply = (value: string) => (send: Send) => {
+    send(botFrame({ text: value }));
+    send(botFrame({ messageType: "EndOfRequest" }));
+  };
+  const incomplete =
+    "I cannot confirm the QNT settings because we have not yet retrieved runtime configuration from Kubernetes.";
+  const call = '<m365_tool_call>{"name":"' + M365_TOOL_NAMES.searchText
+    + '","input":{"query":"allowmultipleenrollment"}}</m365_tool_call>';
+  const messages = [reply(incomplete), reply(call), reply("QNT property = false (local source).")];
+  const server = await startProtocolServer((send, connection) =>
+    messages[connection.index]?.(send),
+  );
+  const emitted: string[] = [];
+  try {
+    const result = await runToolLoop({
+      framing: "Find the actual QNT configuration; read only.",
+      profile: makeProfile(server.port),
+      tone: null,
+      maxSteps: 3,
+      signal: new AbortController().signal,
+      offeredTools: [{ name: M365_TOOL_NAMES.searchText }],
+      endpointBase: mockBase(server.port),
+      executeTool: async () => "service_properties/dev/atcol-dev-teal: allowmultipleenrollment.QNT=false",
+      onProse: (delta) => emitted.push(delta),
+    });
+    assert.equal(result.outcome, "done");
+    assert.equal(result.steps, 2);
+    assert.equal(result.summary, "QNT property = false (local source).");
+    assert.equal(server.connections.length, 3);
+    assert.equal(emitted.join(""), "QNT property = false (local source).");
+    assert.ok(promptOf(server.connections[1]).includes(t("protocol.force.evidenceGap")));
+    assert.ok(!promptOf(server.connections[2]).includes(t("protocol.force.evidenceGap")));
+  } finally {
+    server.close();
+  }
+
+  const stillIncomplete = await startProtocolServer((send) => reply(incomplete)(send));
+  try {
+    const result = await runToolLoop({
+      framing: "Investigate QNT; read-only",
+      profile: makeProfile(stillIncomplete.port),
+      tone: null,
+      maxSteps: 3,
+      signal: new AbortController().signal,
+      offeredTools: [{ name: M365_TOOL_NAMES.searchText }],
+      endpointBase: mockBase(stillIncomplete.port),
+      executeTool: async () => "some source evidence",
+    });
+    assert.equal(result.outcome, "done", "no tool calls means no auto-loop");
+    assert.equal(stillIncomplete.connections.length, 1);
+  } finally {
+    stillIncomplete.close();
+  }
+
+  const denied = await startProtocolServer((send, connection) => {
+    reply(connection.index === 0 ? call : incomplete)(send);
+  });
+  try {
+    const result = await runToolLoop({
+      framing: "Investigate QNT; read only",
+      profile: makeProfile(denied.port),
+      tone: null,
+      maxSteps: 3,
+      signal: new AbortController().signal,
+      offeredTools: [{ name: M365_TOOL_NAMES.searchText }],
+      endpointBase: mockBase(denied.port),
+      executeTool: async () => "Error: approval denied by user",
+    });
+    assert.equal(result.outcome, "done");
+    assert.equal(denied.connections.length, 2, "never retries an action after denial");
+  } finally {
+    denied.close();
+  }
+  console.log("  ✓ evidence-gap recovery: continue once with tools, preserve denials");
 }
 
 /** The @m365 / sub-agent loop: a step that gives up or works in M365's sandbox is retried once, unseen. */
@@ -6376,6 +6474,7 @@ async function main() {
   await testToolLoopStreamsProse();
   await testToolLoopStopsAfterCall();
   await testToolLoopForcedRetry();
+  await testToolLoopEvidenceRecovery();
   await testToolFailureRemainsEvidence();
   await testNoLabLimitsOrCompletionGate();
   console.log("lineDiff.ts");

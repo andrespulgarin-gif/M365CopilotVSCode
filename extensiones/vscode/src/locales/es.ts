@@ -362,6 +362,12 @@ export const es: Record<keyof typeof en, string> = {
     "ninguna herramienta. Sí puedes: los archivos y comandos de este workspace son reales y están a tu alcance con las " +
     "herramientas de la lista de arriba, y el marcador las ejecuta en la máquina del usuario. No le pidas que pegue " +
     "ni suba nada; responde con la llamada a herramienta del siguiente paso.",
+  "protocol.force.evidenceGap":
+    "En tu respuesta anterior reconociste que todavía no habías consultado evidencia local o del entorno necesaria para la petición, " +
+    "aunque ya utilizaste herramientas del workspace. Eso no es un resultado de investigación terminado. " +
+    "No repitas el diagnóstico ni pidas al usuario que ejecute comprobaciones autorizadas. " +
+    "Consulta ahora la ubicación o clave específica usando una de las herramientas disponibles, respetando el alcance de solo lectura " +
+    "y las aprobaciones. Si una herramienta deniega el acceso o devuelve un error real, informa del bloqueo exacto sin reintentar una operación denegada.",
   "protocol.force.sandbox":
     "Nota: en un intento anterior de esta petición trabajaste en tu propio sandbox en la nube (/mnt/data, /home/…). " +
     "Esa no es la máquina del usuario: nada de lo que hay allí está en este workspace, y nada de lo que crees allí " +
